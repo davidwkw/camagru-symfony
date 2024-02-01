@@ -544,10 +544,6 @@ video {
   --tw-backdrop-sepia:  ;
 }
 
-.block {
-  display: block;
-}
-
 * {
   min-width: 0;
   padding: 0;

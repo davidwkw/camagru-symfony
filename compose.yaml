@@ -43,7 +43,7 @@ services:
       - camagru
     restart: unless-stopped
     volumes:
-      - postgreql_db_data:/var/lib/postgresql/data:rw
+      - postgreql_db_data:/var/lib/postgresql/data
     expose:
       - ${DB_PORT}
     environment:
