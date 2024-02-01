@@ -1,21 +1,87 @@
-version: '3'
+version: '3.8'
+
+name: camagru
 
 services:
-###> doctrine/doctrine-bundle ###
-  database:
-    image: postgres:${POSTGRES_VERSION:-16}-alpine
+  backend:
+    container_name: nginx-backend
+    image: nginx:1.25.3-bookworm
+    restart: unless-stopped
+    networks:
+      - camagru
+    ports:
+      - ${HOST_PORT}:${SERVER_PORT}
+    depends_on:
+      database:
+        condition: service_healthy
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-app}
-      # You should definitely change the password in production
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-!ChangeMe!}
-      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_DB: ${DB_NAME}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+    configs:
+      - source: camagru_nginx_conf_template
+        target: /etc/nginx/templates/default.conf.template
+      - source: backend_configuration_script
+        target: /docker-entrypoint.d/configure.sh
+      - source: composer_install_script
+        target: /docker-entrypoint.d/script-composer-install.sh
+      - source: composer_dependency_install_script
+        target: /docker-entrypoint.d/script-composer-install-deps.sh
+      - source: php-fpm_configuration
+        target: /php-fpm_conf/php.ini
     volumes:
-      - database_data:/var/lib/postgresql/data:rw
-      # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
-      # - ./docker/db/data:/var/lib/postgresql/data:rw
-###< doctrine/doctrine-bundle ###
+      - ./:/var/www/html/camagru:cached
+    env_file:
+      - .env
+      - .env.local
+
+  database:
+    container_name: database
+    image: postgres:16.1-alpine3.19
+    networks:
+      - camagru
+    restart: unless-stopped
+    volumes:
+      - postgreql_db_data:/var/lib/postgresql/data:rw
+    expose:
+      - ${DB_PORT}
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_DB: ${DB_NAME}
+      DB_PORT: ${DB_PORT}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $DB_USER -d $DB_NAME" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    configs:
+      - source: postgresql_configuration
+        target: /etc/postgresql.conf
+      - source: postgresql_configuration_init_tables
+        target: /docker-entrypoint-initdb.d/init_tables.sql
+    env_file:
+      - .env
+      - .env.local
+
+networks:
+  camagru:
 
 volumes:
-###> doctrine/doctrine-bundle ###
-  database_data:
-###< doctrine/doctrine-bundle ###
+  postgreql_db_data:
+
+configs:
+  camagru_nginx_conf_template:
+    file: ./docker/nginx/conf/default.conf.template
+  backend_configuration_script:
+    file: ./docker/nginx/conf/configure.sh
+  postgresql_configuration:
+    file: ./docker/postgresql/conf/postgresql.conf
+  postgresql_configuration_init_tables:
+    file: ./docker/postgresql/conf/init_tables.sql
+  php-fpm_configuration:
+    file: ./docker/nginx/conf/php.ini
+  composer_install_script:
+    file: ./docker/nginx/conf/script-composer-install.sh
+  composer_dependency_install_script:
+    file: ./docker/nginx/conf/script-composer-install-deps.sh
